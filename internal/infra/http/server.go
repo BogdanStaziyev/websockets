@@ -12,6 +12,6 @@ func NewServer() *Server {
 	return &Server{Echo: echo.New()}
 }
 
-func (s Server) Start() error {
+func (s *Server) Start() error {
 	return s.Echo.Start(":8080")
 }

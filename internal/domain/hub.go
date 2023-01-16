@@ -1,14 +1,29 @@
 package domain
 
-import (
-	"github.com/go-redis/redis/v8"
-	"myWebsockets/internal/infra/http/handlers"
-)
-
 type Hub struct {
-	Rdb        *redis.Client
-	Clients    map[*handlers.Client]bool
+	Clients    map[*Client]bool
 	Broadcast  chan []byte
-	Register   chan *handlers.Client
-	Unregister chan *handlers.Client
+	Register   chan *Client
+	Unregister chan *Client
+}
+
+func (h *Hub) Run() {
+	for {
+		select {
+		case client := <-h.Register:
+			h.registerClient(client)
+		case client := <-h.Unregister:
+			h.unregisterClient(client)
+		}
+	}
+}
+
+func (h *Hub) registerClient(client *Client) {
+	h.Clients[client] = true
+}
+
+func (h *Hub) unregisterClient(client *Client) {
+	if _, ok := h.Clients[client]; ok {
+		delete(h.Clients, client)
+	}
 }

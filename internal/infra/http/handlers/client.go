@@ -1,23 +1,20 @@
 package handlers
 
 import (
+	"fmt"
 	"github.com/gorilla/websocket"
 	"github.com/labstack/echo/v4"
-	"myWebsockets/internal/domain"
+	s "myWebsockets/internal/infra/http"
 	"net/http"
 )
 
-type Client struct {
-	hub  *domain.Hub
-	conn *websocket.Conn
-	send chan []byte
+type WebsocketConn struct {
+	server *s.Server
 }
 
-func NewClient(conn *websocket.Conn, hub *domain.Hub) *Client {
-	return &Client{
-		hub:  hub,
-		conn: conn,
-		send: make(chan []byte, 1024),
+func NewWebsocketConn(s *s.Server) *WebsocketConn {
+	return &WebsocketConn{
+		server: s,
 	}
 }
 
@@ -26,12 +23,7 @@ var upgrader = websocket.Upgrader{
 	WriteBufferSize: 1024,
 }
 
-func (cli *Client) disconnected() {
-	cli.hub.Unregister <- cli
-	cli.conn.Close()
-}
-
-func (cli *Client) Socket(c echo.Context) error {
+func (cli *WebsocketConn) Socket(c echo.Context) error {
 	upgrader.CheckOrigin = func(r *http.Request) bool {
 		return true
 	}
@@ -39,6 +31,13 @@ func (cli *Client) Socket(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-
-	return nil
+	defer conn.Close()
+	for {
+		// Read
+		_, msg, err := conn.ReadMessage()
+		if err != nil {
+			c.Logger().Error(err)
+		}
+		fmt.Printf("%s\n", msg)
+	}
 }
