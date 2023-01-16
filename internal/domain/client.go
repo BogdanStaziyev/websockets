@@ -49,9 +49,9 @@ func (c *Client) processEvents(rawMessage []byte) error {
 	if baseMessage.Name == "" {
 		return errors.New("error deserializing message")
 	}
-	for cl, _ := range c.Hub.Clients {
-		if cl != nil {
-			err = cl.Conn.WriteJSON(baseMessage)
+	for clients := range c.Hub.Clients {
+		if clients != nil {
+			err = clients.Conn.WriteJSON(baseMessage)
 			if err != nil {
 				return err
 			}
@@ -69,24 +69,36 @@ func (c *Client) WritePump() {
 	for {
 		select {
 		case message, ok := <-c.Send:
-			c.Conn.SetWriteDeadline(time.Now().Add(writeWait))
+			err := c.Conn.SetWriteDeadline(time.Now().Add(writeWait))
+			if err != nil {
+				return
+			}
 			if !ok {
 				// The hub closed the channel.
-				c.Conn.WriteMessage(websocket.CloseMessage, []byte{})
+				err = c.Conn.WriteMessage(websocket.CloseMessage, []byte{})
+				if err != nil {
+					return
+				}
 				return
 			}
 			w, err := c.Conn.NextWriter(websocket.TextMessage)
 			if err != nil {
 				log.Printf("error: %v", err)
 			}
-			w.Write(message)
+			_, err = w.Write(message)
+			if err != nil {
+				return
+			}
 
 			if err := w.Close(); err != nil {
 				return
 			}
 
 		case <-ticker.C:
-			c.Conn.SetWriteDeadline(time.Now().Add(writeWait))
+			err := c.Conn.SetWriteDeadline(time.Now().Add(writeWait))
+			if err != nil {
+				return
+			}
 			if err := c.Conn.WriteMessage(websocket.PingMessage, nil); err != nil {
 				return
 			}
@@ -99,8 +111,11 @@ func (c *Client) ReadPump() {
 		c.disconnect()
 	}()
 	c.Conn.SetReadLimit(maxMessageSize)
-	c.Conn.SetReadDeadline(time.Now().Add(pongWait))
-	c.Conn.SetPongHandler(func(string) error { c.Conn.SetReadDeadline(time.Now().Add(pongWait)); return nil })
+	err := c.Conn.SetReadDeadline(time.Now().Add(pongWait))
+	if err != nil {
+		return
+	}
+	c.Conn.SetPongHandler(func(string) error { _ = c.Conn.SetReadDeadline(time.Now().Add(pongWait)); return nil })
 	for {
 		_, message, err := c.Conn.ReadMessage()
 		if err != nil {
