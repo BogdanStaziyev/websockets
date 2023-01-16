@@ -1,9 +1,9 @@
 package handlers
 
 import (
-	"fmt"
 	"github.com/gorilla/websocket"
 	"github.com/labstack/echo/v4"
+	"myWebsockets/internal/domain"
 	s "myWebsockets/internal/infra/http"
 	"net/http"
 )
@@ -31,13 +31,13 @@ func (cli *WebsocketConn) Socket(c echo.Context) error {
 	if err != nil {
 		return err
 	}
+	client := domain.NewClient(conn, cli.server.Hub)
+
+	client.Hub.Register <- client
+
 	defer conn.Close()
 	for {
-		// Read
-		_, msg, err := conn.ReadMessage()
-		if err != nil {
-			c.Logger().Error(err)
-		}
-		fmt.Printf("%s\n", msg)
+		client.ReadPump()
+		client.WritePump()
 	}
 }
