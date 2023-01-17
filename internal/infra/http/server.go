@@ -2,18 +2,18 @@ package http
 
 import (
 	"github.com/labstack/echo/v4"
-	"myWebsockets/internal/domain"
+	"myWebsockets/internal/app"
 )
 
 type Server struct {
 	Echo *echo.Echo
-	Hub  *domain.Hub
+	Hub  *app.Hub
 }
 
 func NewServer() *Server {
 	s := &Server{
 		Echo: echo.New(),
-		Hub:  domain.NewHub(),
+		Hub:  app.NewHub(),
 	}
 	go s.Hub.Run()
 	return s

@@ -1,4 +1,9 @@
-package domain
+package app
+
+import (
+	"fmt"
+	"github.com/labstack/gommon/log"
+)
 
 type Hub struct {
 	Clients    map[*Client]bool
@@ -21,11 +26,14 @@ func (h *Hub) Run() {
 		select {
 		case client := <-h.Register:
 			h.registerClient(client)
+			str := fmt.Sprintf("User %s entered the chat", client.ID)
+			h.broadcastToClients([]byte(str))
+			log.Error("Register new client")
 		case client := <-h.Unregister:
 			h.unregisterClient(client)
+			log.Error("Unregister new client")
 		case message := <-h.Broadcast:
 			h.broadcastToClients(message)
-
 		}
 	}
 }

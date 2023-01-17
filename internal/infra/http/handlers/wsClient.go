@@ -3,7 +3,7 @@ package handlers
 import (
 	"github.com/gorilla/websocket"
 	"github.com/labstack/echo/v4"
-	"myWebsockets/internal/domain"
+	"myWebsockets/internal/app"
 	s "myWebsockets/internal/infra/http"
 	"net/http"
 )
@@ -24,20 +24,16 @@ var upgrader = websocket.Upgrader{
 }
 
 func (cli *WebsocketConn) Socket(c echo.Context) error {
-	upgrader.CheckOrigin = func(r *http.Request) bool {
-		return true
-	}
+	upgrader.CheckOrigin = func(r *http.Request) bool { return true }
 	conn, err := upgrader.Upgrade(c.Response(), c.Request(), nil)
 	if err != nil {
 		return err
 	}
-	client := domain.NewClient(conn, cli.server.Hub)
+	client := app.NewClient(conn, cli.server.Hub)
 
 	client.Hub.Register <- client
 
-	defer conn.Close()
-	for {
-		client.ReadPump()
-		client.WritePump()
-	}
+	go client.WritePump()
+	go client.ReadPump()
+	return err
 }
