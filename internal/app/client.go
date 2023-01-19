@@ -3,7 +3,6 @@ package app
 import (
 	"encoding/json"
 	"errors"
-	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 	"log"
 	"myWebsockets/internal/domain"
@@ -17,29 +16,21 @@ const (
 	maxMessageSize = 1024
 )
 
-type Client struct {
-	ID   string
-	Name string
-	Conn *websocket.Conn
-	Hub  *Hub
-	Send chan []byte
+type ClientService interface {
+	ProcessEvents(rawMessage []byte, client *domain.Client) error
+	ReadPump(client *domain.Client)
+	WritePump(client *domain.Client)
 }
 
-func NewClient(conn *websocket.Conn, hub *Hub) *Client {
-	return &Client{
-		Conn: conn,
-		Hub:  hub,
-		Send: make(chan []byte, 1024),
-		ID:   uuid.New().String(),
-	}
+type clientService struct {
+	e EventService
 }
 
-func (c *Client) disconnect() {
-	c.Hub.Unregister <- c
-	c.Conn.Close()
+func NewClientService(event EventService) ClientService {
+	return clientService{e: event}
 }
 
-func (c *Client) processEvents(rawMessage []byte) error {
+func (c clientService) ProcessEvents(rawMessage []byte, client *domain.Client) error {
 	var baseMessage domain.Base
 	err := json.Unmarshal(rawMessage, &baseMessage)
 	if err != nil {
@@ -58,12 +49,10 @@ func (c *Client) processEvents(rawMessage []byte) error {
 			log.Println(err)
 			return err
 		}
-		byt, err := json.Marshal(message.Message)
-		if err != nil {
-			log.Println(err)
+		if err = c.e.SendMessageToAll(client, message); err != nil {
 			return err
 		}
-		c.Hub.Broadcast <- byt
+		return nil
 	}
 
 	return err
@@ -74,21 +63,22 @@ func (c *Client) processEvents(rawMessage []byte) error {
 // The application runs ReadPump in a per-connection goroutine. The application
 // ensures that there is at most one reader on a connection by executing all
 // reads from this goroutine.
-func (c *Client) ReadPump() {
+func (c clientService) ReadPump(client *domain.Client) {
+
 	defer func() {
-		c.disconnect()
+		client.Disconnect()
 	}()
-	c.Conn.SetReadLimit(maxMessageSize)
-	if err := c.Conn.SetReadDeadline(time.Now().Add(pongWait)); err != nil {
+	client.Conn.SetReadLimit(maxMessageSize)
+	if err := client.Conn.SetReadDeadline(time.Now().Add(pongWait)); err != nil {
 		log.Println(err)
 		return
 	}
-	c.Conn.SetPongHandler(func(string) error {
+	client.Conn.SetPongHandler(func(string) error {
 		//log.Println("pong")
-		return c.Conn.SetReadDeadline(time.Now().Add(pongWait))
+		return client.Conn.SetReadDeadline(time.Now().Add(pongWait))
 	})
 	for {
-		_, message, err := c.Conn.ReadMessage()
+		_, message, err := client.Conn.ReadMessage()
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
 				log.Printf("error: %v", err)
@@ -96,7 +86,7 @@ func (c *Client) ReadPump() {
 			log.Printf("error: %v", err)
 			break
 		}
-		err = c.processEvents(message)
+		err = c.ProcessEvents(message, client)
 		if err != nil {
 			log.Printf("error: %v", err)
 		}
@@ -109,28 +99,28 @@ func (c *Client) ReadPump() {
 // A goroutine running WritePump is started for each connection. The
 // application ensures that there is at most one writer to a connection by
 // executing all writes from this goroutine.
-func (c *Client) WritePump() {
+func (c clientService) WritePump(client *domain.Client) {
 	ticker := time.NewTicker(pingPeriod)
 	defer func() {
 		ticker.Stop()
-		c.Conn.Close()
+		client.Conn.Close()
 	}()
 	for {
 		select {
-		case message, ok := <-c.Send:
+		case message, ok := <-client.Send:
 			//todo ???
-			err := c.Conn.SetWriteDeadline(time.Now().Add(writeWait))
+			err := client.Conn.SetWriteDeadline(time.Now().Add(writeWait))
 			if err != nil {
 				return
 			}
 			if !ok {
 				// The hub closed the channel.
-				if err := c.Conn.WriteMessage(websocket.CloseMessage, []byte{}); err != nil {
+				if err := client.Conn.WriteMessage(websocket.CloseMessage, []byte{}); err != nil {
 					log.Println("connection closed: ", err)
 				}
 				return
 			}
-			w, err := c.Conn.NextWriter(websocket.TextMessage)
+			w, err := client.Conn.NextWriter(websocket.TextMessage)
 			if err != nil {
 				log.Printf("error: %v", err)
 				return
@@ -146,11 +136,11 @@ func (c *Client) WritePump() {
 			}
 		case <-ticker.C:
 			//log.Printf("ping")
-			err := c.Conn.SetWriteDeadline(time.Now().Add(writeWait))
+			err := client.Conn.SetWriteDeadline(time.Now().Add(writeWait))
 			if err != nil {
 				return
 			}
-			if err = c.Conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+			if err = client.Conn.WriteMessage(websocket.PingMessage, nil); err != nil {
 				log.Println("write msg: ", err)
 				return
 			}

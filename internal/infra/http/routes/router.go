@@ -2,15 +2,13 @@ package routes
 
 import (
 	"github.com/labstack/echo/v4/middleware"
+	"myWebsockets/config/constructor"
 	"myWebsockets/internal/infra/http"
-	"myWebsockets/internal/infra/http/handlers"
 )
 
-func Router(s *http.Server) {
-	webHandler := handlers.NewWebsocketConn(s)
-
+func Router(s *http.Server, c constructor.Container) {
 	e := s.Echo
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
-	e.GET("ws", webHandler.Socket)
+	e.GET("ws", c.Handlers.Socket)
 }

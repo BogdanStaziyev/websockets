@@ -1,24 +1,30 @@
 package main
 
 import (
+	"fmt"
+	"github.com/joho/godotenv"
 	"log"
+	"myWebsockets/config"
+	"myWebsockets/config/constructor"
 	"myWebsockets/internal/infra/http"
 	"myWebsockets/internal/infra/http/routes"
 )
 
 func main() {
-	//var conf = config.GetConf()
-	//err := godotenv.Load()
-	//if err != nil {
-	//	fmt.Println("Error loading ..env file")
-	//}
-	//cont := container.New(*conf)
+	var conf = config.GetConf()
+	err := godotenv.Load()
+
+	if err != nil {
+		fmt.Println("Error loading ..env file")
+	}
 
 	server := http.NewServer()
 
-	routes.Router(server)
+	cont := constructor.New(*conf, *server)
 
-	err := server.Start()
+	routes.Router(server, cont)
+
+	err = server.Start()
 	if err != nil {
 		log.Fatal("Port already used")
 	}

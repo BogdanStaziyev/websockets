@@ -4,17 +4,20 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/labstack/echo/v4"
 	"myWebsockets/internal/app"
+	"myWebsockets/internal/domain"
 	s "myWebsockets/internal/infra/http"
 	"net/http"
 )
 
 type WebsocketConn struct {
-	server *s.Server
+	server        *s.Server
+	clientService app.ClientService
 }
 
-func NewWebsocketConn(s *s.Server) *WebsocketConn {
-	return &WebsocketConn{
-		server: s,
+func NewWebsocketConn(s *s.Server, c app.ClientService) WebsocketConn {
+	return WebsocketConn{
+		server:        s,
+		clientService: c,
 	}
 }
 
@@ -29,11 +32,11 @@ func (cli *WebsocketConn) Socket(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	client := app.NewClient(conn, cli.server.Hub)
+	client := domain.NewClient(conn, cli.server.Hub)
 
 	client.Hub.Register <- client
 
-	go client.WritePump()
-	go client.ReadPump()
+	go cli.clientService.WritePump(client)
+	go cli.clientService.ReadPump(client)
 	return err
 }
