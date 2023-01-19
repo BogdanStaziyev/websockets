@@ -52,7 +52,16 @@ func (c clientService) ProcessEvents(rawMessage []byte, client *domain.Client) e
 		if err = c.e.SendMessageToAll(client, message); err != nil {
 			return err
 		}
-		return nil
+	case domain.ActionSendPrivate:
+		var message domain.SendMessageToOne
+		err = json.Unmarshal(rawMessage, &message)
+		if err != nil {
+			log.Println(err)
+			return err
+		}
+		if err = c.e.SendMessageToOne(client, message); err != nil {
+			return err
+		}
 	}
 
 	return err
